@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { ArrowRight, Search, Bookmark, Clock, MapPin } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,17 +7,10 @@ import { supabase } from '@/lib/supabase';
 import Animated, { FadeInDown, FadeInUp, SlideInRight } from 'react-native-reanimated';
 import React, { useEffect, useState } from 'react';
 import { ReadingHistoryService } from '@/services/readingHistory';
+import { QURAN_DATA, searchSurah, type SurahData } from '@/data/quran';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, TextInput, ScrollView, Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
-
-interface Surah {
-  nomor: number;
-  nama: string;
-  namaLatin: string;
-  jumlahAyat: number;
-  tempatTurun: string; // Mekah atau Madinah
-}
 
 interface PrayerTimes {
   fajr: string;
@@ -38,25 +31,23 @@ interface Bookmark {
 export default function SurahListScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const [surahList, setSurahList] = useState<Surah[]>([]);
-  const [filteredSurahList, setFilteredSurahList] = useState<Surah[]>([]);
+  const [surahList, setSurahList] = useState<SurahData[]>(QURAN_DATA);
+  const [filteredSurahList, setFilteredSurahList] = useState<SurahData[]>(QURAN_DATA);
   const [searchQuery, setSearchQuery] = useState('');
   const [prayerTimes, setPrayerTimes] = useState<PrayerTimes | null>(null);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [activeTab, setActiveTab] = useState<'surah' | 'bookmarks' | 'prayer'>('surah');
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
-  const fetchSurahList = async () => {
+  const initializeData = async () => {
     try {
-      const res = await fetch('https://equran.id/api/v2/surat');
-      const json = await res.json();
-      if (json.data) {
-        setSurahList(json.data);
-        setFilteredSurahList(json.data);
-      }
+      // Data is already loaded from local source
+      setSurahList(QURAN_DATA);
+      setFilteredSurahList(QURAN_DATA);
+      await fetchPrayerTimes();
+      await fetchBookmarks();
     } catch (error) {
-      console.error('Failed to fetch surah list:', error);
+      console.error('Error initializing data:', error);
     } finally {
       setLoading(false);
     }
@@ -105,13 +96,9 @@ export default function SurahListScreen() {
   const handleSearch = (query: string) => {
     setSearchQuery(query);
     if (query.trim() === '') {
-      setFilteredSurahList(surahList);
+      setFilteredSurahList(QURAN_DATA);
     } else {
-      const filtered = surahList.filter(surah =>
-        surah.namaLatin.toLowerCase().includes(query.toLowerCase()) ||
-        surah.nama.includes(query) ||
-        surah.nomor.toString().includes(query)
-      );
+      const filtered = searchSurah(query);
       setFilteredSurahList(filtered);
     }
   };
@@ -149,9 +136,7 @@ export default function SurahListScreen() {
   };
 
   useEffect(() => {
-    fetchSurahList();
-    fetchPrayerTimes();
-    fetchBookmarks();
+    initializeData();
   }, []);
 
   if (loading) {
@@ -162,7 +147,7 @@ export default function SurahListScreen() {
     );  
   }
 
-  const renderSurahItem = ({ item }: { item: Surah }) => (
+  const renderSurahItem = ({ item }: { item: SurahData }) => (
     <Pressable
       style={({ pressed }) => [
         styles.card,
@@ -170,7 +155,7 @@ export default function SurahListScreen() {
       ]}
       onPress={() => {
         updateReadingHistory(item.nomor, item.namaLatin, 1, item.jumlahAyat);
-        router.push(`/(tabs)/equran?nomor=${item.nomor}`);
+        router.push(`/equran?nomor=${item.nomor}`);
       }}
 
     >
